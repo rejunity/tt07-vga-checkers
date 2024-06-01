@@ -1,77 +1,11 @@
 /*
- * Copyright (c) 2024 ReJ aka Renaldas Zioma
+ * Copyright (c) 2024 Uri Shaked
  * SPDX-License-Identifier: Apache-2.0
  */
 
 `default_nettype none
 
-/*
-Video sync generator, used to drive a VGA monitor.
-Timing from: https://en.wikipedia.org/wiki/Video_Graphics_Array
-To use:
-- Wire the hsync and vsync signals to top level outputs
-- Add a 3-bit (or more) "rgb" output to the top level
-*/
-
-module hvsync_generator(clk, reset, hsync, vsync, display_on, hpos, vpos);
-
-  input clk;
-  input reset;
-  output reg hsync, vsync;
-  output display_on;
-  output reg [9:0] hpos;
-  output reg [9:0] vpos;
-
-  // declarations for TV-simulator sync parameters
-  // horizontal constants
-  parameter H_DISPLAY       = 640; // horizontal display width
-  parameter H_BACK          =  48; // horizontal left border (back porch)
-  parameter H_FRONT         =  16; // horizontal right border (front porch)
-  parameter H_SYNC          =  96; // horizontal sync width
-  // vertical constants
-  parameter V_DISPLAY       = 480; // vertical display height
-  parameter V_TOP           =  33; // vertical top border
-  parameter V_BOTTOM        =  10; // vertical bottom border
-  parameter V_SYNC          =   2; // vertical sync # lines
-  // derived constants
-  parameter H_SYNC_START    = H_DISPLAY + H_FRONT;
-  parameter H_SYNC_END      = H_DISPLAY + H_FRONT + H_SYNC - 1;
-  parameter H_MAX           = H_DISPLAY + H_BACK + H_FRONT + H_SYNC - 1;
-  parameter V_SYNC_START    = V_DISPLAY + V_BOTTOM;
-  parameter V_SYNC_END      = V_DISPLAY + V_BOTTOM + V_SYNC - 1;
-  parameter V_MAX           = V_DISPLAY + V_TOP + V_BOTTOM + V_SYNC - 1;
-
-  wire hmaxxed = (hpos == H_MAX) || reset;  // set when hpos is maximum
-  wire vmaxxed = (vpos == V_MAX) || reset;  // set when vpos is maximum
-  
-  // horizontal position counter
-  always @(posedge clk)
-  begin
-    hsync <= (hpos>=H_SYNC_START && hpos<=H_SYNC_END);
-    if(hmaxxed)
-      hpos <= 0;
-    else
-      hpos <= hpos + 1;
-  end
-
-  // vertical position counter
-  always @(posedge clk)
-  begin
-    vsync <= (vpos>=V_SYNC_START && vpos<=V_SYNC_END);
-    if(hmaxxed)
-      if (vmaxxed)
-        vpos <= 0;
-      else
-        vpos <= vpos + 1;
-  end
-  
-  // display_on is set when beam is in "safe" visible frame
-  assign display_on = (hpos<H_DISPLAY) && (vpos<V_DISPLAY);
-
-endmodule
-
-
-module tt_um_rejunity_vga(
+module tt_um_vga_example(
   input  wire [7:0] ui_in,    // Dedicated inputs
   output wire [7:0] uo_out,   // Dedicated outputs
   input  wire [7:0] uio_in,   // IOs: Input path
@@ -144,11 +78,15 @@ module tt_um_rejunity_vga(
   //           (c ? 6'b11_01_00 : 
   //             (d ? 6'b10_00_00 : 6'b00_00_00)))) : 6'b00_00_00;
 
+
+  wire [5:0] white = ~ui_in[5:0];
+  wire [5:0] grey = white ^ 6'b00_10_10;
+
   assign {R, G, B} = 
       video_active ? 
         // (a ? (pix_y[0] ^ pix_x[0] ? 6'b11_11_11 : 6'b00_00_00) :
-        ((a & (pix_y[1] ^ pix_x[0])) ? 6'b11_10_10 :
-          (b & (~pix_y[0] ^ pix_x[1]) ? 6'b11_01_01 : 
+        ((a & (pix_y[1] ^ pix_x[0])) ? white :
+          (b & (~pix_y[0] ^ pix_x[1]) ? grey : 
             (c ? 6'b10_00_00 : 
               (d ? 6'b01_00_00 :
                 (e & (pix_y[1] ^ pix_x[0]) ? 6'b01_00_00 : 6'b00_00_00))))) : 6'b00_00_00;
